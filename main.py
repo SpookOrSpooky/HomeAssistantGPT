@@ -1,4 +1,5 @@
 import json
+import requests
 
 import quart
 import quart_cors
@@ -6,34 +7,44 @@ from quart import request
 
 app = quart_cors.cors(quart.Quart(__name__), allow_origin="https://chat.openai.com")
 
-# Keep track of todo's. Does not persist if Python session is restarted.
-_TODOS = {}
+CONFIG = {
+    "home_assistant_url": "https://basicallyjarvis.duckdns.org:8123",
+    "access_token": "uwGdfMFi1FdCEQvRr7nfdo_hCHEGPftyBVWc0JqDFVA",
+}
 
-@app.post("/todos/<string:username>")
-async def add_todo(username):
-    request = await quart.request.get_json(force=True)
-    if username not in _TODOS:
-        _TODOS[username] = []
-    _TODOS[username].append(request["todo"])
-    return quart.Response(response='OK', status=200)
+HEADERS = {
+    "Authorization": f"Bearer {CONFIG['access_token']}",
+    "content-type": "application/json",
+}
 
-@app.get("/todos/<string:username>")
-async def get_todos(username):
-    return quart.Response(response=json.dumps(_TODOS.get(username, [])), status=200)
+def get_home_assistant_url(endpoint):
+    return f"{CONFIG['home_assistant_url']}{endpoint}"
 
-@app.delete("/todos/<string:username>")
-async def delete_todo(username):
-    request = await quart.request.get_json(force=True)
-    todo_idx = request["todo_idx"]
-    # fail silently, it's a simple plugin
-    if 0 <= todo_idx < len(_TODOS[username]):
-        _TODOS[username].pop(todo_idx)
-    return quart.Response(response='OK', status=200)
+@app.post("/lights/<string:entity_id>/<string:status>")
+async def change_light_status(entity_id, status):
+    if status not in ["on", "off"]:
+        return quart.Response(response="Invalid status. Accepted values: on, off", status=400)
 
-@app.get("/logo.png")
-async def plugin_logo():
-    filename = 'logo.png'
-    return await quart.send_file(filename, mimetype='image/png')
+    url = get_home_assistant_url(f"/api/services/light/turn_{status}")
+    data = {"entity_id": entity_id}
+    response = requests.post(url, headers=HEADERS, json=data)
+
+    if response.status_code == 200:
+        return quart.Response(response="OK", status=200)
+    else:
+        return quart.Response(response="Error changing light status", status=500)
+
+@app.get("/lights")
+async def discover_lights():
+    url = get_home_assistant_url("/api/states")
+    response = requests.get(url, headers=HEADERS)
+
+    if response.status_code == 200:
+        states = response.json()
+        lights = [state for state in states if state["entity_id"].startswith("light.")]
+        return quart.Response(response=json.dumps(lights), status=200)
+    else:
+        return quart.Response(response="Error discovering lights", status=500)
 
 @app.get("/.well-known/ai-plugin.json")
 async def plugin_manifest():
@@ -42,10 +53,10 @@ async def plugin_manifest():
         text = f.read()
         return quart.Response(text, mimetype="text/json")
 
-@app.get("/openapi.yaml")
-async def openapi_spec():
+@app.get("/plugin_manifest.yaml")
+async def plugin_manifest_yaml():
     host = request.headers['Host']
-    with open("openapi.yaml") as f:
+    with open("plugin_manifest.yaml") as f:
         text = f.read()
         return quart.Response(text, mimetype="text/yaml")
 
