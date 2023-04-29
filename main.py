@@ -1,16 +1,21 @@
 import json
 import requests
+import os
+from dotenv import load_dotenv
+import logging
 
 import quart
 import quart_cors
 from quart import request
-
 app = quart_cors.cors(quart.Quart(__name__), allow_origin="https://chat.openai.com")
 
+load_dotenv()
+
 CONFIG = {
-    "home_assistant_url": "https://basicallyjarvis.duckdns.org:8123",
-    "access_token": "uwGdfMFi1FdCEQvRr7nfdo_hCHEGPftyBVWc0JqDFVA",
+    "home_assistant_url": os.getenv("HOME_ASSISTANT_URL"),
+    "access_token": os.getenv("HOME_ASSISTANT_API_KEY"),
 }
+
 
 HEADERS = {
     "Authorization": f"Bearer {CONFIG['access_token']}",
@@ -20,14 +25,35 @@ HEADERS = {
 def get_home_assistant_url(endpoint):
     return f"{CONFIG['home_assistant_url']}{endpoint}"
 
-@app.post("/lights/<string:entity_id>/<string:status>")
+# Set up logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+@app.route("/lights/<string:entity_id>/<string:status>", methods=["POST", "OPTIONS"])
 async def change_light_status(entity_id, status):
+    # Log the request method and path
+    logging.debug(f"Request Method: {request.method}")
+    logging.debug(f"Request Path: {request.path}")
+
+    # Handle OPTIONS request (preflight request)
+    if request.method == "OPTIONS":
+        return quart.Response(status=200)
+
     if status not in ["on", "off"]:
         return quart.Response(response="Invalid status. Accepted values: on, off", status=400)
 
     url = get_home_assistant_url(f"/api/services/light/turn_{status}")
     data = {"entity_id": entity_id}
+
+    # Log the request details
+    logging.debug(f"URL: {url}")
+    logging.debug(f"Headers: {HEADERS}")
+    logging.debug(f"Payload: {data}")
+
     response = requests.post(url, headers=HEADERS, json=data)
+
+    # Log the response details
+    logging.debug(f"Response Status Code: {response.status_code}")
+    logging.debug(f"Response Content: {response.content}")
 
     if response.status_code == 200:
         return quart.Response(response="OK", status=200)

@@ -1,93 +1,64 @@
 openapi: 3.0.1
 info:
-  title: TODO Plugin
-  description: A plugin that allows the user to create and manage a TODO list using ChatGPT. If you do not know the user's username, ask them first before making queries to the plugin. Otherwise, use the username "global".
+  title: Home Assistant Light Controller Plugin
+  description: A plugin that allows the user to discover and control light statuses in Home Assistant using ChatGPT.
   version: 'v1'
 servers:
   - url: http://localhost:5003
 paths:
-  /todos/{username}:
+  /lights:
     get:
-      operationId: getTodos
-      summary: Get the list of todos
-      parameters:
-      - in: path
-        name: username
-        schema:
-            type: string
-        required: true
-        description: The name of the user.
+      operationId: discoverLights
+      summary: Discover available lights in Home Assistant
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/getTodosResponse'
+                type: array
+                items:
+                  $ref: '#/components/schemas/Light'
+  /lights/{entity_id}:
     post:
-      operationId: addTodo
-      summary: Add a todo to the list
+      operationId: changeLightStatus
+      summary: Change the status of a light in Home Assistant
       parameters:
-      - in: path
-        name: username
-        schema:
+        - in: path
+          name: entity_id
+          schema:
             type: string
-        required: true
-        description: The name of the user.
+          required: true
+          description: The entity_id of the light to control.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/addTodoRequest'
+              $ref: '#/components/schemas/LightStatusRequest'
       responses:
         "200":
           description: OK
-    delete:
-      operationId: deleteTodo
-      summary: Delete a todo from the list
-      parameters:
-      - in: path
-        name: username
-        schema:
-            type: string
-        required: true
-        description: The name of the user.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/deleteTodoRequest'
-      responses:
-        "200":
-          description: OK
+        "400":
+          description: Invalid status
+        "500":
+          description: Error changing light status
 
 components:
   schemas:
-    getTodosResponse:
+    Light:
       type: object
       properties:
-        todos:
-          type: array
-          items:
-            type: string
-          description: The list of todos.
-    addTodoRequest:
-      type: object
-      required:
-      - todo
-      properties:
-        todo:
+        entity_id:
           type: string
-          description: The todo to add to the list.
-          required: true
-    deleteTodoRequest:
+        state:
+          type: string
+    LightStatusRequest:
       type: object
       required:
-      - todo_idx
+        - status
       properties:
-        todo_idx:
-          type: integer
-          description: The index of the todo to delete.
-          required: true
+        status:
+          type: string
+          enum: [on, off]
+          description: The desired status of the light, accepted values are 'on' and 'off'.
